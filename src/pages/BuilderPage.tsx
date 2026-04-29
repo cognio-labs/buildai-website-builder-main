@@ -373,6 +373,14 @@ export function BuilderPage() {
                    <Button 
                     variant="ghost" 
                     size="sm" 
+                    className="h-8 gap-2"
+                    onClick={formatCode}
+                   >
+                     Format
+                   </Button>
+                   <Button 
+                    variant="ghost" 
+                    size="sm" 
                     className={`h-8 gap-2 ${showDiff ? 'bg-primary/10 text-primary' : ''}`}
                     onClick={() => setShowDiff(!showDiff)}
                    >
@@ -421,10 +429,15 @@ export function BuilderPage() {
                     defaultLanguage="javascript"
                     theme="vs-dark"
                     value={latestCode}
+                    onChange={(value) => setLatestCode(value || '')}
+                    onMount={handleEditorMount}
                     options={{
-                      readOnly: true,
+                      readOnly: false,
                       minimap: { enabled: false },
                       fontSize: 14,
+                      formatOnPaste: true,
+                      formatOnType: true,
+                      suggestOnTriggerCharacters: true,
                     }}
                   />
                 )}
