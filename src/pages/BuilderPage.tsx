@@ -52,9 +52,63 @@ export function BuilderPage() {
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [imagePrompt, setImagePrompt] = useState('')
+  const [activeUsers, setActiveUsers] = useState<any[]>([])
+  const [userCursors, setUserCursors] = useState<Record<string, any>>({})
   
   const chatEndRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<any>(null)
+  const isRemoteChange = useRef(false)
+
+  // Realtime setup
+  useEffect(() => {
+    if (!projectId || !user) return
+
+    const channel = blink.realtime.channel(`project-${projectId}`)
+    
+    // Subscribe to code updates
+    channel.subscribe('code-update', (data: any) => {
+      if (data.sender !== user.id) {
+        isRemoteChange.current = true
+        setLatestCode(data.code)
+      }
+    })
+
+    // Subscribe to cursor updates
+    channel.subscribe('cursor-update', (data: any) => {
+      if (data.userId !== user.id) {
+        setUserCursors(prev => ({ ...prev, [data.userId]: data }))
+      }
+    })
+
+    // Presence
+    channel.presence.join({ 
+      id: user.id, 
+      name: user.email?.split('@')[0] || 'User',
+      color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 50%)` 
+    })
+
+    channel.presence.on('sync', () => {
+      const state = channel.presence.state()
+      setActiveUsers(Object.values(state).flat())
+    })
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [projectId, user])
+
+  // Broadcast code changes
+  useEffect(() => {
+    if (isRemoteChange.current) {
+      isRemoteChange.current = false
+      return
+    }
+    
+    if (latestCode && user && projectId) {
+       const channel = blink.realtime.channel(`project-${projectId}`)
+       channel.publish('code-update', { code: latestCode, sender: user.id })
+    }
+  }, [latestCode])
 
   // Fetch project data
   const { data: project, isLoading: projectLoading } = useQuery({
@@ -151,6 +205,19 @@ export function BuilderPage() {
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor
     
+    // Listen for cursor changes
+    editor.onDidChangeCursorPosition((e: any) => {
+      if (user && projectId) {
+        const channel = blink.realtime.channel(`project-${projectId}`)
+        channel.publish('cursor-update', {
+          userId: user.id,
+          position: e.position,
+          name: user.email?.split('@')[0] || 'User',
+          color: activeUsers.find(u => u.id === user.id)?.color || '#3b82f6'
+        })
+      }
+    })
+
     // Add basic auto-completion
     monaco.languages.registerCompletionItemProvider('javascript', {
       provideCompletionItems: (model: any, position: any) => {
